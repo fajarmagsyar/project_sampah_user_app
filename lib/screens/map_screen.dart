@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:geolocator/geolocator.dart';
 
 import 'package:latlong2/latlong.dart';
 
@@ -16,11 +17,40 @@ class MapScreen extends StatefulWidget {
 
 class _MapScreenState extends State<MapScreen> {
   List bins = [];
+  LatLng? _currentLocation; // add this
 
   @override
   void initState() {
     super.initState();
+    getCurrentLocation();
     fetchBins();
+  }
+
+  Future<void> getCurrentLocation() async {
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      return;
+    }
+
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        return;
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      return;
+    }
+
+    Position position = await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.high,
+    );
+
+    setState(() {
+      _currentLocation = LatLng(position.latitude, position.longitude);
+    });
   }
 
   Future<void> fetchBins() async {
@@ -103,41 +133,71 @@ class _MapScreenState extends State<MapScreen> {
         ),
       ),
 
-      body: FlutterMap(
-        options: MapOptions(
-          initialCenter: LatLng(-7.2756, 112.7923), // Surabaya-ish
-          initialZoom: 17,
-        ),
-        children: [
-          TileLayer(
-            urlTemplate: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-            userAgentPackageName: 'com.example.app',
-          ),
-          MarkerLayer(
-            markers: bins.map((bin) {
-              return Marker(
-                width: 40,
-                height: 40,
-                point: LatLng(bin['lat'], bin['lng']),
-                child: GestureDetector(
-                  onTap: () {
-                    showDialog(
-                      context: context,
-                      builder: (_) => AlertDialog(
-                        title: Text(bin['name']),
-                        content: Text(
-                          "Open: ${bin['openTime']}\nClose: ${bin['closeTime']}\nPickup: ${bin['pickupTime']}",
+      body: _currentLocation == null
+          ? const Center(child: CircularProgressIndicator())
+          : FlutterMap(
+              options: MapOptions(
+                initialCenter: _currentLocation!,
+                initialZoom: 17,
+              ),
+              children: [
+                TileLayer(
+                  urlTemplate: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+                  userAgentPackageName: 'com.example.app',
+                ),
+                MarkerLayer(
+                  markers: bins.map((bin) {
+                    final lat = bin['lat'];
+                    final lng = bin['lng'];
+                    return Marker(
+                      width: 50,
+                      height: 50,
+                      point: LatLng(lat, lng),
+                      child: GestureDetector(
+                        onTap: () {
+                          showDialog(
+                            context: context,
+                            builder: (_) => AlertDialog(
+                              title: Text(bin['name']),
+                              content: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    "🕒 Open: ${bin['openTime']} - ${bin['closeTime']}",
+                                  ),
+                                  Text("📦 Pickup: ${bin['pickupTime']}"),
+                                  const SizedBox(height: 12),
+                                  TextButton.icon(
+                                    icon: const Icon(Icons.directions),
+                                    label: const Text("Get Directions"),
+                                    onPressed: () {
+                                      final mapsUrl =
+                                          "https://www.google.com/maps/dir/?api=1&destination=$lat,$lng";
+                                      print(
+                                        "Open this URL in browser: $mapsUrl",
+                                      );
+                                      Navigator.of(
+                                        context,
+                                      ).pop(); // Close dialog
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                        child: const Icon(
+                          Icons.location_pin,
+                          size: 40,
+                          color: Colors.red,
                         ),
                       ),
                     );
-                  },
-                  child: const Icon(Icons.delete_outline, color: Colors.green),
+                  }).toList(),
                 ),
-              );
-            }).toList(),
-          ),
-        ],
-      ),
+              ],
+            ),
     );
   }
 }
