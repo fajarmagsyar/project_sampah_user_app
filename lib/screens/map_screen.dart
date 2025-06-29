@@ -25,12 +25,13 @@ class _MapScreenState extends State<MapScreen> {
 
   Future<void> fetchBins() async {
     final res = await http.get(
-      Uri.parse('https://your-server.com/api/public/bins'),
+      Uri.parse('http://10.0.2.2:3000/api/public/bins'),
     );
 
     if (res.statusCode == 200) {
       setState(() {
         bins = json.decode(res.body);
+        print("Bins loaded: ${bins.length}");
       });
     } else {
       print("Failed to load bins");
@@ -104,8 +105,8 @@ class _MapScreenState extends State<MapScreen> {
 
       body: FlutterMap(
         options: MapOptions(
-          center: LatLng(-7.2756, 112.7923), // Surabaya-ish
-          zoom: 13,
+          initialCenter: LatLng(-7.2756, 112.7923), // Surabaya-ish
+          initialZoom: 17,
         ),
         children: [
           TileLayer(
